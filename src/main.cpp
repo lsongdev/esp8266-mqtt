@@ -3,46 +3,53 @@
 #include <PubSubClient.h>
 #include <WiFiManager.h>
 
-// WiFiManager settings
-char mqttServer[40] = "192.168.8.160"; // Default MQTT server
-char mqttPort[6] = "1883"; // Default MQTT port
-char mqttUser[40] = ""; // Default MQTT user (can be an empty string)
-char mqttPassword[40] = ""; // Default MQTT password (can be an empty string)
-
-const char* apName = "ESP8266-MQTT";
-const char* clientID = "ESP8266-LED";
-const char* ledTopic = "led";
+const char *apName = "ESP8266-MQTT";
+const char *clientID = "esp8266-led";
+const char *ledTopic = "esp8266-led/led";
 const int ledPin = LED_BUILTIN;
 
 WiFiClient wlan;
 PubSubClient mqtt(wlan);
+WiFiManager wifiManager(apName);
+
+// Add custom parameters for configuring MQTT server information
+WiFiManagerParameter custom_mqtt_server("mqtt_server", "MQTT Server", "192.168.8.160", 40);
+WiFiManagerParameter custom_mqtt_port("mqtt_port", "MQTT Port", "1883", 6);
+WiFiManagerParameter custom_mqtt_user("mqtt_user", "MQTT User", "mqtt", 40);
+WiFiManagerParameter custom_mqtt_password("mqtt_password", "MQTT Password", "mqtt123", 40);
 
 // WiFiManager callback function
-void saveConfigCallback() {
+void saveConfigCallback()
+{
   Serial.println("Configuration saved");
-  strcpy(mqttServer, WiFiManagerParameter("mqtt_server").getValue());
-  strcpy(mqttPort, WiFiManagerParameter("mqtt_port").getValue());
-  strcpy(mqttUser, WiFiManagerParameter("mqtt_user").getValue());
-  strcpy(mqttPassword, WiFiManagerParameter("mqtt_password").getValue());
 }
 
-void reconnect() {
-  while (!mqtt.connected()) {
+void reconnect()
+{
+  String user = custom_mqtt_user.getValue();
+  String pass = custom_mqtt_password.getValue();
+  while (!mqtt.connected())
+  {
     Serial.println("Attempting to connect to the MQTT server...");
-    if (mqtt.connect(clientID, mqttUser, mqttPassword)) {
-      Serial.println("MQTT reconnected");
+    if (mqtt.connect(clientID, user.c_str(), pass.c_str()))
+    {
+      Serial.println("MQTT connected");
       mqtt.subscribe(ledTopic);
-    } else {
-      Serial.print("MQTT connect failed, retrying...");
+    }
+    else
+    {
+      Serial.println("MQTT connect failed, retrying...");
       delay(2000);
     }
   }
 }
 
-void onMessage(char* topic, byte* payload, unsigned int length) {
+void onMessage(char *topic, byte *payload, unsigned int length)
+{
   // Handle received messages
   String payloadStr = "";
-  for (int i = 0; i < length; i++) {
+  for (unsigned int i = 0; i < length; i++)
+  {
     payloadStr += (char)payload[i];
   }
 
@@ -51,44 +58,41 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
   Serial.print("] ");
   Serial.println(payloadStr);
 
-  if (strcmp(topic, ledTopic) == 0) {
+  if (strcmp(topic, ledTopic) == 0)
+  {
     // If an LED control message is received, perform the corresponding action
-    if (payloadStr == "on") {
-      digitalWrite(ledPin, HIGH);
-    } else if (payloadStr == "off") {
+    if (payloadStr == "on")
+    {
       digitalWrite(ledPin, LOW);
+    }
+    else if (payloadStr == "off")
+    {
+      digitalWrite(ledPin, HIGH);
     }
   }
 }
 
-
-void setup() {
+void setup()
+{
+  Serial.begin(9600);
   pinMode(ledPin, OUTPUT);
 
-  WiFiManager wifiManager;
-  // Add custom parameters for configuring MQTT server information
-  WiFiManagerParameter custom_mqtt_server("mqtt_server", "MQTT Server", mqttServer, 40);
-  WiFiManagerParameter custom_mqtt_port("mqtt_port", "MQTT Port", mqttPort, 6);
-  WiFiManagerParameter custom_mqtt_user("mqtt_user", "MQTT User", mqttUser, 40);
-  WiFiManagerParameter custom_mqtt_password("mqtt_password", "MQTT Password", mqttPassword, 40);
-
-  wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.addParameter(&custom_mqtt_server);
   wifiManager.addParameter(&custom_mqtt_port);
   wifiManager.addParameter(&custom_mqtt_user);
   wifiManager.addParameter(&custom_mqtt_password);
-
-  // Initialize WiFi connection and connect to a saved WiFi network or start AP mode for configuration
-  wifiManager.autoConnect(apName);
+  wifiManager.autoConnect();
 
   // Set the MQTT server and port
-  mqtt.setServer(mqttServer, atoi(mqttPort));
+  mqtt.setServer(custom_mqtt_server.getValue(), atoi(custom_mqtt_port.getValue()));
   mqtt.setCallback(onMessage);
   mqtt.setClient(wlan);
 }
 
-void loop() {
-  if (!mqtt.connected()) {
+void loop()
+{
+  if (!mqtt.connected())
+  {
     reconnect();
   }
   mqtt.loop();
